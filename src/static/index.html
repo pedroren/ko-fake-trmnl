@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ko-fake-trmnl</title>
+<style>
+:root{--bg:#e6e8e4;--card:#f2f3f0;--ink:#151716;--mute:#5b605d;--acc:#2438d9;--rule:#b9bdb8}
+@media (prefers-color-scheme:dark){:root{--bg:#141615;--card:#1d2020;--ink:#e6e8e4;--mute:#9aa09c;--acc:#8c9bff;--rule:#3a3f3d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+header{padding:28px 24px 20px;background-image:radial-gradient(var(--ink) 1px,transparent 1.2px);background-size:6px 6px;background-position:0 0;
+  -webkit-mask-image:none}
+header h1{margin:0;display:inline-block;background:var(--bg);padding:2px 12px 2px 0;font-size:28px;letter-spacing:-.02em}
+header p{margin:6px 0 0;background:var(--bg);display:inline-block;padding-right:12px;color:var(--mute)}
+main{display:grid;grid-template-columns:230px 1fr;gap:24px;padding:24px;max-width:1100px;margin:auto}
+@media(max-width:760px){main{grid-template-columns:1fr}}
+h2{font-size:17px;margin:0 0 10px}
+.panel{background:var(--card);border:1px solid var(--rule);padding:16px}
+ul{list-style:none;margin:0 0 12px;padding:0}
+li button.pl{width:100%;text-align:left;border:0;border-bottom:1px solid var(--rule);background:none;color:inherit;padding:8px 4px;cursor:pointer;font:inherit}
+li button.pl[aria-current=true]{font-weight:700;color:var(--acc)}
+input,select,button{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--rule);padding:6px 8px;border-radius:3px}
+button{cursor:pointer}button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+@media (prefers-color-scheme:dark){button.primary{color:#0b0d1a}}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.row{display:grid;grid-template-columns:56px 1fr 86px auto;gap:8px;align-items:center;margin-bottom:8px}
+.row img{width:56px;height:42px;object-fit:cover;background:var(--rule)}
+.row input[type=number]{width:86px}
+.mini{display:flex;gap:4px}
+code{font-family:ui-monospace,monospace;font-size:13px;word-break:break-all}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.hint{color:var(--mute);margin:0 0 12px}
+table{width:100%;border-collapse:collapse}td{padding:6px 4px;border-top:1px solid var(--rule);vertical-align:middle}
+section+section{margin-top:24px}
+#msg{position:fixed;bottom:16px;right:16px;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:3px;display:none}
+</style>
+</head>
+<body>
+<header><h1>ko-fake-trmnl</h1><br><p>Playlists and devices for your TRMNL KOReader plugin</p></header>
+<main>
+  <aside class="panel">
+    <h2>Playlists</h2>
+    <ul id="plist"></ul>
+    <div class="bar"><input id="newpl" placeholder="playlist name" aria-label="New playlist name"><button id="addpl">Create playlist</button></div>
+  </aside>
+  <div>
+    <section class="panel" id="editor"></section>
+    <section class="panel">
+      <h2>Devices</h2>
+      <p class="hint">Devices appear here after their first request. Assign each one a playlist.</p>
+      <table id="devs"></table>
+      <div class="bar"><input id="newdev" placeholder="device id" aria-label="New device id"><button id="adddev">Add device</button></div>
+    </section>
+  </div>
+</main>
+<div id="msg" role="status"></div>
+<script>
+const $=s=>document.querySelector(s);
+const h=(t,a={},...k)=>{const e=document.createElement(t);for(const[n,v]of Object.entries(a)){if(n.startsWith('on'))e.addEventListener(n.slice(2),v);else if(n in e&&n!=='list')e[n]=v;else e.setAttribute(n,v)}e.append(...k.flat());return e};
+let db={playlists:{},devices:{}},cur=null,draft=[];
+const api=async(m,p,b)=>{const r=await fetch('/admin/api'+p,{method:m,headers:b?{'Content-Type':'application/json'}:{},body:b?JSON.stringify(b):undefined});if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r.json()};
+const toast=t=>{const m=$('#msg');m.textContent=t;m.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>m.style.display='none',1800)};
+async function refresh(){db=await api('GET','/state');if(cur&&!db.playlists[cur])cur=null;if(!cur){cur=Object.keys(db.playlists)[0]||null;draft=cur?structuredClone(db.playlists[cur].items):[]}render()}
+function pick(n){cur=n;draft=structuredClone(db.playlists[n].items);render()}
+function render(){
+  const ul=$('#plist');ul.replaceChildren(...Object.entries(db.playlists).map(([n,p])=>h('li',{},h('button',{className:'pl',onclick:()=>pick(n),'aria-current':n===cur},`${n} (${p.items.length})`))));
+  if(!Object.keys(db.playlists).length)ul.append(h('li',{className:'hint'},'No playlists yet. Create one to start.'));
+  const ed=$('#editor');ed.replaceChildren();
+  if(!cur){ed.append(h('p',{className:'hint'},'Create a playlist to add images.'));}
+  else{
+    const url=`${location.origin}/playlist/${cur}`;
+    ed.append(h('h2',{},cur),h('p',{className:'hint'},'Client URL: ',h('code',{},url)));
+    draft.forEach((it,i)=>ed.append(h('div',{className:'row'},
+      h('img',{src:it.image_url,alt:''}),
+      h('input',{value:it.image_url,placeholder:'https://… or /images/file.png','aria-label':'Image URL',oninput:e=>it.image_url=e.target.value,onchange:render}),
+      h('input',{type:'number',min:1,value:it.refresh_rate,'aria-label':'Refresh rate in seconds',oninput:e=>it.refresh_rate=+e.target.value}),
+      h('div',{className:'mini'},
+        h('button',{title:'Move up','aria-label':'Move up',onclick:()=>{if(i){[draft[i-1],draft[i]]=[draft[i],draft[i-1]];render()}}},'↑'),
+        h('button',{title:'Move down','aria-label':'Move down',onclick:()=>{if(i<draft.length-1){[draft[i+1],draft[i]]=[draft[i],draft[i+1]];render()}}},'↓'),
+        h('button',{title:'Remove','aria-label':'Remove item',onclick:()=>{draft.splice(i,1);render()}},'✕')))));
+    if(!draft.length)ed.append(h('p',{className:'hint'},'No images yet. Add a URL or upload a file.'));
+    const file=h('input',{type:'file',accept:'image/*',hidden:true,onchange:async e=>{const f=e.target.files[0];if(!f)return;const fd=new FormData();fd.append('file',f);
+      const r=await fetch('/admin/api/images',{method:'POST',body:fd});if(!r.ok)return toast('Upload failed');draft.push({image_url:(await r.json()).url,refresh_rate:60});render()}});
+    ed.append(h('div',{className:'bar'},
+      h('button',{onclick:()=>{draft.push({image_url:'',refresh_rate:60});render()}},'Add image URL'),
+      h('button',{onclick:()=>file.click()},'Upload image'),file,
+      h('button',{className:'primary',onclick:async()=>{await api('PUT','/playlists/'+cur,{items:draft});await refresh();toast('Playlist saved')}},'Save playlist'),
+      h('button',{onclick:async()=>{if(confirm(`Delete playlist "${cur}"?`)){await api('DELETE','/playlists/'+cur);cur=null;await refresh();toast('Playlist deleted')}}},'Delete playlist')));
+  }
+  const t=$('#devs');t.replaceChildren(...Object.entries(db.devices).map(([id,d])=>h('tr',{},
+    h('td',{},h('code',{},id)),
+    h('td',{},h('select',{'aria-label':'Playlist for '+id,onchange:async e=>{await api('PUT','/devices/'+encodeURIComponent(id),{playlist:e.target.value});await refresh();toast('Device updated')}},
+      h('option',{value:''},'(default playlist)'),...Object.keys(db.playlists).map(n=>h('option',{value:n,selected:n===d.playlist},n)))),
+    h('td',{},h('code',{},`/device/${id}`)),
+    h('td',{},h('button',{'aria-label':'Delete device '+id,onclick:async()=>{await api('DELETE','/devices/'+encodeURIComponent(id));await refresh();toast('Device deleted')}},'✕')))));
+  if(!Object.keys(db.devices).length)t.append(h('tr',{},h('td',{className:'hint'},'No devices yet.')));
+}
+$('#addpl').onclick=async()=>{const n=$('#newpl').value.trim();if(!n)return;try{await api('PUT','/playlists/'+encodeURIComponent(n),{items:[]});cur=n;draft=[];$('#newpl').value='';await refresh();pick(n)}catch(e){toast('Use letters, numbers, - _ . :')}};
+$('#adddev').onclick=async()=>{const n=$('#newdev').value.trim();if(!n)return;try{await api('PUT','/devices/'+encodeURIComponent(n),{playlist:null});$('#newdev').value='';await refresh()}catch(e){toast('Use letters, numbers, - _ . :')}};
+refresh();
+</script>
+</body>
+</html>
