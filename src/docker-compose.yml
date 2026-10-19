@@ -2,7 +2,7 @@ services:
   ko-fake-trmnl:
     build: .
     ports:
-      - "${HOST_PORT:-4567}:5000"
+      - "${HOST_PORT:-2300}:5000"
     environment:
       DATA_DIR: /data
       DEFAULT_PLAYLIST: ${DEFAULT_PLAYLIST:-default}
