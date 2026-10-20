@@ -1,5 +1,5 @@
 """ko-fake-trmnl: a tiny fake TRMNL BYOS server (Flask + JSON file)."""
-import json, os, re, tempfile, threading
+import json, logging, os, re, sys, tempfile, threading, time
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
@@ -11,6 +11,30 @@ DEFAULT_REFRESH = 60
 NAME_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 os.makedirs(IMAGES_DIR, exist_ok=True)
+
+# ---------- logging (goes to stdout -> `docker logs` / Portainer) ----------
+log = logging.getLogger("ko-fake-trmnl")
+log.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+if not log.handlers:
+    _h = logging.StreamHandler(sys.stdout)
+    _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    log.addHandler(_h)
+    log.propagate = False
+last_seen = {}  # who -> monotonic time of previous request (in memory only)
+
+
+def log_serve(who, src, name, idx, total, item):
+    now = time.monotonic()
+    prev = last_seen.get(who)
+    last_seen[who] = now
+    gap = f"{now - prev:.1f}s" if prev else "first"
+    log.info(
+        "serve who=%s src=%s playlist=%s served=%s/%s next=%s refresh=%ss gap=%s url=%s ip=%s ua=%r token=%s",
+        who, src, name, idx + 1, total, (idx + 1) % total + 1, item.get("refresh_rate"),
+        gap, item["image_url"], request.remote_addr, request.headers.get("User-Agent", ""),
+        "yes" if request.headers.get("Access-Token") else "no",
+    )
+    log.debug("headers=%s", {k: v for k, v in request.headers if k.lower() != "access-token"})
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 lock = threading.RLock()  # run with ONE gunicorn worker (threads are fine)
 
@@ -41,22 +65,24 @@ def save(db):
 def next_item(holder, items):
     """Return the current item and advance the cursor (holder = playlist or device)."""
     if not items:
-        return None
+        return None, None
     i = holder.get("cursor", 0) % len(items)
     holder["cursor"] = (i + 1) % len(items)
-    return items[i]
+    return i, items[i]
 
 
 def trmnl_response(item):
     url = item["image_url"]
     if url.startswith("/"):  # relative -> absolute, so you can use uploaded images
         url = request.host_url.rstrip("/") + url
-    return jsonify(
+    resp = jsonify(
         status=0,
         image_url=url,
         filename=os.path.basename(url.split("?")[0]),
         refresh_rate=int(item.get("refresh_rate", DEFAULT_REFRESH)),
     )
+    resp.headers["Cache-Control"] = "no-store"  # never let a proxy/client reuse a response
+    return resp
 
 
 def empty_playlist():
@@ -69,31 +95,42 @@ def playlist(name):
     with lock:
         db = load()
         pl = db["playlists"].get(name)
-        item = next_item(pl, pl["items"]) if pl else None
+        idx, item = next_item(pl, pl["items"]) if pl else (None, None)
         if item:
             save(db)
-    return trmnl_response(item) if item else empty_playlist()
+    if item is None:
+        log.warning("empty src=/playlist playlist=%s (missing or no items) ip=%s", name, request.remote_addr)
+        return empty_playlist()
+    log_serve(f"playlist:{name}", "/playlist", name, idx, len(pl["items"]), item)
+    return trmnl_response(item)
 
 
-def serve_device(device_id):
+def serve_device(device_id, src):
     with lock:
         db = load()
+        if device_id not in db["devices"]:
+            log.info("new device registered: %s", device_id)
         dev = db["devices"].setdefault(device_id, {"playlist": None, "cursor": 0})
-        pl = db["playlists"].get(dev.get("playlist") or DEFAULT_PLAYLIST)
-        item = next_item(dev, pl["items"]) if pl else None
+        name = dev.get("playlist") or DEFAULT_PLAYLIST
+        pl = db["playlists"].get(name)
+        idx, item = next_item(dev, pl["items"]) if pl else (None, None)
         save(db)  # also persists auto-registered devices
-    return trmnl_response(item) if item else empty_playlist()
+    if item is None:
+        log.warning("empty who=%s src=%s playlist=%s (missing or no items)", device_id, src, name)
+        return empty_playlist()
+    log_serve(device_id, src, name, idx, len(pl["items"]), item)
+    return trmnl_response(item)
 
 
 @app.get("/device/<device_id>")
 def device(device_id):
-    return serve_device(device_id)
+    return serve_device(device_id, "/device")
 
 
 @app.get("/api/display")  # what real TRMNL clients call
 def api_display():
     device_id = request.headers.get("ID") or request.headers.get("Access-Token") or "unknown"
-    return serve_device(device_id)
+    return serve_device(device_id, "/api/display")
 
 
 @app.post("/api/log")
@@ -143,6 +180,7 @@ def put_playlist(name):
         pl["items"] = items
         pl["cursor"] = pl.get("cursor", 0) % len(items) if items else 0
         save(db)
+    log.info("admin: playlist %s saved with %d items (cursor now %d)", name, len(items), pl["cursor"])
     return jsonify(ok=True)
 
 
@@ -170,6 +208,7 @@ def put_device(device_id):
             dev["cursor"] = 0
         dev["playlist"] = pl
         save(db)
+    log.info("admin: device %s -> playlist %s (cursor %d)", device_id, pl, dev["cursor"])
     return jsonify(ok=True)
 
 
