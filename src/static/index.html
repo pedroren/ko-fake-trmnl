@@ -33,6 +33,11 @@ code{font-family:ui-monospace,monospace;font-size:13px;word-break:break-all}
 .hint{color:var(--mute);margin:0 0 12px}
 table{width:100%;border-collapse:collapse}td{padding:6px 4px;border-top:1px solid var(--rule);vertical-align:middle}
 section+section{margin-top:24px}
+.meta{font-size:13px;color:var(--mute);margin-top:2px}
+.batt{display:inline-flex;align-items:center;gap:6px}
+.cell{display:inline-block;width:22px;height:10px;border:1px solid var(--ink);padding:1px}
+.cell i{display:block;height:100%;background:var(--ink)}
+.batt.low{color:var(--ink);font-weight:700}.batt.low .cell i{background:var(--acc)}
 #msg{position:fixed;bottom:16px;right:16px;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:3px;display:none}
 </style>
 </head>
@@ -88,8 +93,13 @@ function render(){
       h('button',{className:'primary',onclick:async()=>{await api('PUT','/playlists/'+cur,{items:draft});await refresh();toast('Playlist saved')}},'Save playlist'),
       h('button',{onclick:async()=>{if(confirm(`Delete playlist "${cur}"?`)){await api('DELETE','/playlists/'+cur);cur=null;await refresh();toast('Playlist deleted')}}},'Delete playlist')));
   }
+  renderDevices();
+}
+const ago=t=>{if(!t)return'';const s=Math.max(0,(db.now||Date.now()/1000)-t);if(s<90)return'just now';if(s<3600)return Math.round(s/60)+' min ago';if(s<86400)return Math.round(s/3600)+' h ago';return Math.round(s/86400)+' d ago'};
+const batt=d=>d.battery==null?'battery unknown':h('span',{className:'batt'+(d.battery<20?' low':''),title:'Battery level reported at last fetch'},h('span',{className:'cell'},h('i',{style:`width:${d.battery}%`})),d.battery+'%'+(d.battery<20?' (low)':''));
+function renderDevices(){
   const t=$('#devs');t.replaceChildren(...Object.entries(db.devices).map(([id,d])=>h('tr',{},
-    h('td',{},h('code',{},id)),
+    h('td',{},h('code',{},id),h('div',{className:'meta'},batt(d),d.last_seen?' · seen '+ago(d.last_seen):'')),
     h('td',{},h('select',{'aria-label':'Playlist for '+id,onchange:async e=>{await api('PUT','/devices/'+encodeURIComponent(id),{playlist:e.target.value});await refresh();toast('Device updated')}},
       h('option',{value:''},'(default playlist)'),...Object.keys(db.playlists).map(n=>h('option',{value:n,selected:n===d.playlist},n)))),
     h('td',{},h('code',{},`/device/${id}`)),
@@ -99,6 +109,11 @@ function render(){
 $('#addpl').onclick=async()=>{const n=$('#newpl').value.trim();if(!n)return;try{await api('PUT','/playlists/'+encodeURIComponent(n),{items:[]});cur=n;draft=[];$('#newpl').value='';await refresh();pick(n)}catch(e){toast('Use letters, numbers, - _ . :')}};
 $('#adddev').onclick=async()=>{const n=$('#newdev').value.trim();if(!n)return;try{await api('PUT','/devices/'+encodeURIComponent(n),{playlist:null});$('#newdev').value='';await refresh()}catch(e){toast('Use letters, numbers, - _ . :')}};
 refresh();
+// keep battery / last-seen fresh without touching the playlist editor
+setInterval(async()=>{
+  if(document.activeElement&&document.activeElement.closest('#devs'))return; // don't close an open dropdown
+  try{const s=await api('GET','/state');db.devices=s.devices;db.now=s.now;renderDevices()}catch(e){}
+},30000);
 </script>
 </body>
 </html>

@@ -23,16 +23,26 @@ if not log.handlers:
 last_seen = {}  # who -> monotonic time of previous request (in memory only)
 
 
+def parse_battery(raw):
+    """Plugin sends 'Percent-Charged: 0-100'. Return an int or None if missing/invalid."""
+    try:
+        v = int(float(raw))
+    except (TypeError, ValueError):
+        return None
+    return v if 0 <= v <= 100 else None
+
+
 def log_serve(who, src, name, idx, total, item):
     now = time.monotonic()
     prev = last_seen.get(who)
     last_seen[who] = now
     gap = f"{now - prev:.1f}s" if prev else "first"
     log.info(
-        "serve who=%s src=%s playlist=%s served=%s/%s next=%s refresh=%ss gap=%s url=%s ip=%s ua=%r token=%s",
+        "serve who=%s src=%s playlist=%s served=%s/%s next=%s refresh=%ss gap=%s url=%s ip=%s ua=%r token=%s battery=%s",
         who, src, name, idx + 1, total, (idx + 1) % total + 1, item.get("refresh_rate"),
         gap, item["image_url"], request.remote_addr, request.headers.get("User-Agent", ""),
         "yes" if request.headers.get("Access-Token") else "no",
+        request.headers.get("Percent-Charged", "n/a"),
     )
     log.debug("headers=%s", {k: v for k, v in request.headers if k.lower() != "access-token"})
 app = Flask(__name__, static_folder="static", static_url_path="/static")
@@ -111,6 +121,10 @@ def serve_device(device_id, src):
         if device_id not in db["devices"]:
             log.info("new device registered: %s", device_id)
         dev = db["devices"].setdefault(device_id, {"playlist": None, "cursor": 0})
+        dev["last_seen"] = int(time.time())
+        batt = parse_battery(request.headers.get("Percent-Charged"))
+        if batt is not None:  # keep the previous reading if this request lacked the header
+            dev["battery"] = batt
         name = dev.get("playlist") or DEFAULT_PLAYLIST
         pl = db["playlists"].get(name)
         idx, item = next_item(dev, pl["items"]) if pl else (None, None)
@@ -166,7 +180,9 @@ def index():
 @app.get("/admin/api/state")
 def admin_state():
     with lock:
-        return jsonify(load())
+        db = load()
+    db["now"] = int(time.time())  # lets the UI compute "seen x min ago" without trusting its own clock
+    return jsonify(db)
 
 
 @app.put("/admin/api/playlists/<name>")
