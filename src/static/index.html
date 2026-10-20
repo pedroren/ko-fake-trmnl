@@ -4,42 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ko-fake-trmnl</title>
-<style>
-:root{--bg:#e6e8e4;--card:#f2f3f0;--ink:#151716;--mute:#5b605d;--acc:#2438d9;--rule:#b9bdb8}
-@media (prefers-color-scheme:dark){:root{--bg:#141615;--card:#1d2020;--ink:#e6e8e4;--mute:#9aa09c;--acc:#8c9bff;--rule:#3a3f3d}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
-header{padding:28px 24px 20px;background-image:radial-gradient(var(--ink) 1px,transparent 1.2px);background-size:6px 6px;background-position:0 0;
-  -webkit-mask-image:none}
-header h1{margin:0;display:inline-block;background:var(--bg);padding:2px 12px 2px 0;font-size:28px;letter-spacing:-.02em}
-header p{margin:6px 0 0;background:var(--bg);display:inline-block;padding-right:12px;color:var(--mute)}
-main{display:grid;grid-template-columns:230px 1fr;gap:24px;padding:24px;max-width:1100px;margin:auto}
-@media(max-width:760px){main{grid-template-columns:1fr}}
-h2{font-size:17px;margin:0 0 10px}
-.panel{background:var(--card);border:1px solid var(--rule);padding:16px}
-ul{list-style:none;margin:0 0 12px;padding:0}
-li button.pl{width:100%;text-align:left;border:0;border-bottom:1px solid var(--rule);background:none;color:inherit;padding:8px 4px;cursor:pointer;font:inherit}
-li button.pl[aria-current=true]{font-weight:700;color:var(--acc)}
-input,select,button{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--rule);padding:6px 8px;border-radius:3px}
-button{cursor:pointer}button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
-@media (prefers-color-scheme:dark){button.primary{color:#0b0d1a}}
-:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
-.row{display:grid;grid-template-columns:56px 1fr 86px auto;gap:8px;align-items:center;margin-bottom:8px}
-.row img{width:56px;height:42px;object-fit:cover;background:var(--rule)}
-.row input[type=number]{width:86px}
-.mini{display:flex;gap:4px}
-code{font-family:ui-monospace,monospace;font-size:13px;word-break:break-all}
-.bar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.hint{color:var(--mute);margin:0 0 12px}
-table{width:100%;border-collapse:collapse}td{padding:6px 4px;border-top:1px solid var(--rule);vertical-align:middle}
-section+section{margin-top:24px}
-.meta{font-size:13px;color:var(--mute);margin-top:2px}
-.batt{display:inline-flex;align-items:center;gap:6px}
-.cell{display:inline-block;width:22px;height:10px;border:1px solid var(--ink);padding:1px}
-.cell i{display:block;height:100%;background:var(--ink)}
-.batt.low{color:var(--ink);font-weight:700}.batt.low .cell i{background:var(--acc)}
-#msg{position:fixed;bottom:16px;right:16px;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:3px;display:none}
-</style>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header><h1>ko-fake-trmnl</h1><br><p>Playlists and devices for your TRMNL KOReader plugin</p></header>

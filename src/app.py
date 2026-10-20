@@ -176,9 +176,11 @@ def clean_items(raw):
 def index():
     return app.send_static_file("index.html")
 
-@app.get("/favicon.ico")
-def index():
+
+@app.get("/favicon.ico")  # browsers request this at the site root
+def favicon():
     return app.send_static_file("favicon.ico")
+
 
 @app.get("/admin/api/state")
 def admin_state():
